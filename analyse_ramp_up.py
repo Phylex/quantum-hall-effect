@@ -9,7 +9,7 @@ def condense_data(df):
     min_time = int(np.floor(df['Time / s'].min()))
     max_time = int(np.ceil(df['Time / s'].max()))
     for i in range(min_time, max_time-1):
-        d = df.copy().where((data['Time / s'] > i) & (data['Time / s'] < i+1))
+        d = df.copy().where((df['Time / s'] > i) & (df['Time / s'] < i+1))
         d = d.dropna()
         means.append((d['Voltage / V'].mean(), d['Voltage / V'].std()))
     m, std = zip(*means)
@@ -17,19 +17,24 @@ def condense_data(df):
          np.array(range(min_time+1, max_time)))/2
     return pd.DataFrame({'V': m, 'stdV': std, 't': x})
 
+def cut_data(df, var, rng):
+    return df.copy().where((df[var] > rng[0]) &
+                           (df[var] < rng[1])).dropna(axis=0)
+
 def mean_error(stds):
     return np.sqrt(sum(np.array(stds)**2))/len(stds)
 
-data = pd.read_csv(sys.argv[1], skiprows=2, delimiter=';')
+du = pd.read_csv(sys.argv[1], skiprows=2, delimiter=';')
 voltage = pd.read_csv(sys.argv[2], skiprows=2, delimiter=';')
 
-cd = condense_data(data)
+cd = condense_data(du)
 vlt = condense_data(voltage)
 
 min_time = int(np.floor(cd['t'].min()))
 max_time = int(np.floor(cd['t'].max()))
 ramp_start_time = 20
 ramp_end_time = 730
+current = 20e-6
 plateaus = [(min_time, ramp_start_time-5), (ramp_end_time+5, max_time)]
 ramp = (ramp_start_time+5, ramp_end_time-5)
 
@@ -71,3 +76,20 @@ r = pd.concat([r, vlt['V'], vlt['stdV']], axis=1).dropna()
 print(r)
 r.plot('B', 'V')
 plt.show()
+
+hall_plateaus = [(4.1, 6.0), (2.2, 2.6), (1.5, 1.7), (1.20, 1.25)]
+for hp in hall_plateaus:
+    hd = cut_data(r, 'B', hp)
+    plat_U, plat_U_std = (hd['V'].mean(), mean_error(hd['stdV']))
+    print("Plateau between {}T and {}T: U=({:.4f} +/- {:.4f})V".format(hp[0],
+                                                               hp[1],
+                                                               plat_U,
+                                                               plat_U_std))
+    print("Corresponding Hall resistance: ({} +/- {}) Ohm".format(round(plat_U/current, -1),
+                                                                     round(plat_U_std/current, -1)))
+
+
+
+
+du = pd.read_csv(sys.argv[3], skiprows=2, delimiter=';')
+vlt = pd.read_csv(sys.argv[4], skiprows=2, delimiter=';')
